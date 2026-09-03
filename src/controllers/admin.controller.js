@@ -136,4 +136,21 @@ const deleteOwner = async (req, res) => {
   }
 };
 
-module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner };
+const deleteTurf = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await db.query('DELETE FROM turfs WHERE id = $1 RETURNING id', [id]);
+    
+    if (result.rows.length === 0) {
+       return res.status(404).json({ success: false, message: 'Turf not found' });
+    }
+
+    return res.status(200).json({ success: true, message: 'Turf deleted successfully' });
+  } catch (err) {
+    console.error('Admin Delete Turf Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf };

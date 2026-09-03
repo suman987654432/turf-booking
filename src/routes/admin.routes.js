@@ -11,6 +11,7 @@ router.use(authorizeRole(['ADMIN']));
 router.get('/turfs', adminController.getAllTurfs);
 router.patch('/turfs/:id/approve', adminController.approveTurf);
 router.patch('/turfs/:id/reject', adminController.rejectTurf);
+router.delete('/turfs/:id', adminController.deleteTurf);
 
 router.get('/owners', adminController.getAllOwners);
 router.delete('/owners/:id', adminController.deleteOwner);
