@@ -113,17 +113,19 @@ const getOwnerTurfs = async (req, res) => {
     const query = `
       SELECT 
         t.*,
-        COALESCE(
-          json_agg(
-            json_build_object('id', s.id, 'name', s.name)
-          ) FILTER (WHERE s.id IS NOT NULL), 
-          '[]'
-        ) AS sports
+        (
+          SELECT COALESCE(json_agg(json_build_object('id', s.id, 'name', s.name)), '[]')
+          FROM turf_sports ts
+          JOIN sports s ON ts.sport_id = s.id
+          WHERE ts.turf_id = t.id
+        ) AS sports,
+        (
+          SELECT COALESCE(json_agg(json_build_object('id', ti.id, 'url', ti.image_url, 'is_primary', ti.is_primary)), '[]')
+          FROM turf_images ti
+          WHERE ti.turf_id = t.id
+        ) AS images
       FROM turfs t
-      LEFT JOIN turf_sports ts ON t.id = ts.turf_id
-      LEFT JOIN sports s ON ts.sport_id = s.id
       WHERE t.owner_id = $1
-      GROUP BY t.id
       ORDER BY t.created_at DESC
     `;
     const turfResult = await db.query(query, [ownerId]);
@@ -200,7 +202,27 @@ const updateTurf = async (req, res) => {
       }
     }
 
-    return res.status(200).json({ success: true, message: 'Turf updated successfully', data: result.rows[0] });
+    // Fetch the fully updated turf with sports and images
+    const fullTurfQuery = `
+      SELECT 
+        t.*,
+        (
+          SELECT COALESCE(json_agg(json_build_object('id', s.id, 'name', s.name)), '[]')
+          FROM turf_sports ts
+          JOIN sports s ON ts.sport_id = s.id
+          WHERE ts.turf_id = t.id
+        ) AS sports,
+        (
+          SELECT COALESCE(json_agg(json_build_object('id', ti.id, 'url', ti.image_url, 'is_primary', ti.is_primary)), '[]')
+          FROM turf_images ti
+          WHERE ti.turf_id = t.id
+        ) AS images
+      FROM turfs t
+      WHERE t.id = $1
+    `;
+    const fullTurfResult = await db.query(fullTurfQuery, [id]);
+
+    return res.status(200).json({ success: true, message: 'Turf updated successfully', data: fullTurfResult.rows[0] });
   } catch (err) {
     console.error('Update Turf Error:', err);
     return res.status(500).json({ success: false, message: 'Internal server error' });
