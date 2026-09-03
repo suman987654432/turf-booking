@@ -1,9 +1,8 @@
 const db = require('../config/db');
 
 const createTurf = async (req, res) => {
-  const { name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, sports } = req.body;
+  const { name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, sports, images } = req.body;
   const userId = req.user.id;
-  const images = req.files || [];
 
   // Basic validation
   if (!name || !address || !city || !price_per_hour || !opening_time || !closing_time) {
@@ -57,10 +56,33 @@ const createTurf = async (req, res) => {
        }
     }
 
+    // 4. Insert Images to DB (URLs provided by frontend)
+    let parsedImages = images;
+    if (typeof images === 'string') {
+      try { parsedImages = JSON.parse(images); } 
+      catch (e) { parsedImages = [images]; }
+    }
+
+    let sortOrder = 0;
+    const uploadedImages = [];
+    if (parsedImages && Array.isArray(parsedImages)) {
+      for (const url of parsedImages) {
+        if (sortOrder >= 5) break; // Max 5 images
+        if (typeof url !== 'string' || !url.trim()) continue;
+
+        const imgRes = await client.query(
+          'INSERT INTO turf_images (turf_id, image_url, is_primary, sort_order) VALUES ($1, $2, $3, $4) RETURNING *',
+          [newTurf.id, url, sortOrder === 0, sortOrder]
+        );
+        uploadedImages.push(imgRes.rows[0]);
+        sortOrder++;
+      }
+    }
+
     await client.query('COMMIT');
     
-    // Attach the sports to the response object so you can see them!
     newTurf.sports = sports || [];
+    newTurf.images = uploadedImages;
 
     return res.status(201).json({
       success: true,
@@ -118,7 +140,7 @@ const getOwnerTurfs = async (req, res) => {
 
 const updateTurf = async (req, res) => {
   const { id } = req.params;
-  const { name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time } = req.body;
+  const { name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, images } = req.body;
   const userId = req.user.id;
 
   try {
@@ -156,6 +178,28 @@ const updateTurf = async (req, res) => {
     
     const result = await db.query(updateQuery, updateValues);
     
+    // If new image URLs were provided, append them
+    let parsedImages = images;
+    if (typeof images === 'string') {
+      try { parsedImages = JSON.parse(images); } 
+      catch (e) { parsedImages = [images]; }
+    }
+
+    if (parsedImages && Array.isArray(parsedImages) && parsedImages.length > 0) {
+      const orderRes = await db.query('SELECT COALESCE(MAX(sort_order), -1) as max_order FROM turf_images WHERE turf_id = $1', [id]);
+      let currentOrder = parseInt(orderRes.rows[0].max_order) + 1;
+      
+      for (const url of parsedImages) {
+        if (typeof url !== 'string' || !url.trim()) continue;
+        
+        await db.query(
+          'INSERT INTO turf_images (turf_id, image_url, is_primary, sort_order) VALUES ($1, $2, $3, $4)',
+          [id, url, currentOrder === 0, currentOrder]
+        );
+        currentOrder++;
+      }
+    }
+
     return res.status(200).json({ success: true, message: 'Turf updated successfully', data: result.rows[0] });
   } catch (err) {
     console.error('Update Turf Error:', err);
