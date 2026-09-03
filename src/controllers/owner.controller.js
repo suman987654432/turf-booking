@@ -115,4 +115,75 @@ const getOwnerTurfs = async (req, res) => {
   }
 };
 
-module.exports = { createTurf, getOwnerTurfs };
+const updateTurf = async (req, res) => {
+  const { id } = req.params;
+  const { name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time } = req.body;
+  const userId = req.user.id;
+
+  try {
+    const ownerResult = await db.query('SELECT id FROM owners WHERE user_id = $1', [userId]);
+    if (ownerResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Owner profile not found' });
+    }
+    const ownerId = ownerResult.rows[0].id;
+
+    // Verify turf belongs to this owner
+    const turfCheck = await db.query('SELECT id FROM turfs WHERE id = $1 AND owner_id = $2', [id, ownerId]);
+    if (turfCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Turf not found or you do not have permission to edit it' });
+    }
+
+    // Update query
+    const updateQuery = `
+      UPDATE turfs 
+      SET name = COALESCE($1, name),
+          description = COALESCE($2, description),
+          address = COALESCE($3, address),
+          city = COALESCE($4, city),
+          state = COALESCE($5, state),
+          pincode = COALESCE($6, pincode),
+          latitude = COALESCE($7, latitude),
+          longitude = COALESCE($8, longitude),
+          price_per_hour = COALESCE($9, price_per_hour),
+          opening_time = COALESCE($10, opening_time),
+          closing_time = COALESCE($11, closing_time),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $12 AND owner_id = $13
+      RETURNING *
+    `;
+    const updateValues = [name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, id, ownerId];
+    
+    const result = await db.query(updateQuery, updateValues);
+    
+    return res.status(200).json({ success: true, message: 'Turf updated successfully', data: result.rows[0] });
+  } catch (err) {
+    console.error('Update Turf Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+const deleteTurf = async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const ownerResult = await db.query('SELECT id FROM owners WHERE user_id = $1', [userId]);
+    if (ownerResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Owner profile not found' });
+    }
+    const ownerId = ownerResult.rows[0].id;
+
+    const result = await db.query('DELETE FROM turfs WHERE id = $1 AND owner_id = $2 RETURNING id', [id, ownerId]);
+    
+    if (result.rows.length === 0) {
+       return res.status(404).json({ success: false, message: 'Turf not found or you do not have permission to delete it' });
+    }
+
+    return res.status(200).json({ success: true, message: 'Turf deleted successfully' });
+  } catch (err) {
+    console.error('Delete Turf Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf };
