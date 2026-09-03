@@ -155,4 +155,34 @@ const deleteTurf = async (req, res) => {
   }
 };
 
-module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf };
+const getSportsStats = async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        s.name as sport_name,
+        COUNT(ts.turf_id) as turf_count,
+        COALESCE(
+          json_agg(
+            json_build_object('id', t.id, 'name', t.name)
+          ) FILTER (WHERE t.id IS NOT NULL),
+          '[]'
+        ) as turfs
+      FROM sports s
+      LEFT JOIN turf_sports ts ON s.id = ts.sport_id
+      LEFT JOIN turfs t ON ts.turf_id = t.id
+      GROUP BY s.id, s.name
+      ORDER BY turf_count DESC
+    `;
+    const result = await db.query(query);
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows
+    });
+  } catch (err) {
+    console.error('Admin Get Sports Stats Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf, getSportsStats };

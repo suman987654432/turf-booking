@@ -16,4 +16,6 @@ router.delete('/turfs/:id', adminController.deleteTurf);
 router.get('/owners', adminController.getAllOwners);
 router.delete('/owners/:id', adminController.deleteOwner);
 
+router.get('/sports-stats', adminController.getSportsStats);
+
 module.exports = router;
