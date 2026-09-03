@@ -1,0 +1,87 @@
+const db = require('../config/db');
+
+const createTables = async () => {
+  const query = `
+    DROP TABLE IF EXISTS turf_sports CASCADE;
+    DROP TABLE IF EXISTS turf_images CASCADE;
+    DROP TABLE IF EXISTS sports CASCADE;
+    DROP TABLE IF EXISTS turfs CASCADE;
+    DROP TABLE IF EXISTS owners CASCADE;
+    DROP TABLE IF EXISTS users CASCADE;
+
+    CREATE TABLE users (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      phone VARCHAR(20),
+      role VARCHAR(50) DEFAULT 'CUSTOMER',
+      status VARCHAR(50) DEFAULT 'ACTIVE',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE owners (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      business_name VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE turfs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      owner_id UUID NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      description TEXT,
+      address TEXT NOT NULL,
+      city VARCHAR(100) NOT NULL,
+      state VARCHAR(100),
+      pincode VARCHAR(20),
+      latitude DECIMAL(10, 8),
+      longitude DECIMAL(11, 8),
+      price_per_hour DECIMAL(10, 2) NOT NULL,
+      opening_time TIME NOT NULL,
+      closing_time TIME NOT NULL,
+      status VARCHAR(50) DEFAULT 'PENDING',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE sports (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(100) UNIQUE NOT NULL,
+      icon VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'ACTIVE',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE turf_images (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      turf_id UUID NOT NULL REFERENCES turfs(id) ON DELETE CASCADE,
+      image_url TEXT NOT NULL,
+      is_primary BOOLEAN DEFAULT false,
+      sort_order INTEGER DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE turf_sports (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      turf_id UUID NOT NULL REFERENCES turfs(id) ON DELETE CASCADE,
+      sport_id UUID NOT NULL REFERENCES sports(id) ON DELETE CASCADE,
+      UNIQUE(turf_id, sport_id)
+    );
+  `;
+
+  try {
+    console.log('Dropping and re-creating all tables with full schema...');
+    await db.query(query);
+    console.log('Tables created successfully!');
+  } catch (err) {
+    console.error('Error creating tables:', err);
+  } finally {
+    db.pool.end();
+  }
+};
+
+createTables();
