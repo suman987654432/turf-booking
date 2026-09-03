@@ -3,6 +3,7 @@ const db = require('../config/db');
 const createTurf = async (req, res) => {
   const { name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, sports } = req.body;
   const userId = req.user.id;
+  const images = req.files || [];
 
   // Basic validation
   if (!name || !address || !city || !price_per_hour || !opening_time || !closing_time) {
