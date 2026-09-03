@@ -90,9 +90,12 @@ const getAllOwners = async (req, res) => {
         u.id AS user_id,
         u.name,
         u.email,
-        u.phone
+        u.phone,
+        COUNT(t.id) AS turf_count
       FROM owners o
       JOIN users u ON o.user_id = u.id
+      LEFT JOIN turfs t ON o.id = t.owner_id
+      GROUP BY o.id, u.id
       ORDER BY o.created_at DESC
     `;
     const result = await db.query(query);
