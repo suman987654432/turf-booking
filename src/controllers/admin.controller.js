@@ -205,4 +205,18 @@ const getAllCustomers = async (req, res) => {
   }
 };
 
-module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf, getSportsStats, getAllCustomers };
+const deleteCustomer = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query(`DELETE FROM users WHERE id = $1 AND role = 'CUSTOMER' RETURNING id`, [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Customer not found' });
+    }
+    return res.status(200).json({ success: true, message: 'Customer deleted successfully' });
+  } catch (err) {
+    console.error('Admin Delete Customer Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf, getSportsStats, getAllCustomers, deleteCustomer };

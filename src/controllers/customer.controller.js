@@ -78,4 +78,22 @@ const getActiveTurfs = async (req, res) => {
   }
 };
 
-module.exports = { getActiveTurfs };
+const updateProfile = async (req, res) => {
+  const userId = req.user.id;
+  const { name, email, phone } = req.body;
+  try {
+    const result = await db.query(
+      `UPDATE users SET name = COALESCE($1, name), email = COALESCE($2, email), phone = COALESCE($3, phone), updated_at = CURRENT_TIMESTAMP WHERE id = $4 RETURNING id, name, email, phone, created_at, updated_at`,
+      [name, email, phone, userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    return res.status(200).json({ success: true, message: 'Profile updated successfully', data: result.rows[0] });
+  } catch (err) {
+    console.error('Customer Update Profile Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { getActiveTurfs, updateProfile };

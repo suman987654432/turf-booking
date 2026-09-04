@@ -8,4 +8,6 @@ const { authorizeRole } = require('../middlewares/role.middleware');
 // If you want to force login, add: authenticateUser, authorizeRole(['CUSTOMER'])
 router.get('/turfs', customerController.getActiveTurfs);
 
+router.put('/profile', authenticateUser, authorizeRole(['CUSTOMER']), customerController.updateProfile);
+
 module.exports = router;
