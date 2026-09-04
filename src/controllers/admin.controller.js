@@ -185,4 +185,24 @@ const getSportsStats = async (req, res) => {
   }
 };
 
-module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf, getSportsStats };
+const getAllCustomers = async (req, res) => {
+  try {
+    const query = `
+      SELECT id, name, email, phone, created_at
+      FROM users
+      WHERE role = 'CUSTOMER'
+      ORDER BY created_at DESC
+    `;
+    const result = await db.query(query);
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows
+    });
+  } catch (err) {
+    console.error('Admin Get All Customers Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf, getSportsStats, getAllCustomers };

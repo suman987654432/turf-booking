@@ -18,4 +18,6 @@ router.delete('/owners/:id', adminController.deleteOwner);
 
 router.get('/sports-stats', adminController.getSportsStats);
 
+router.get('/customers', adminController.getAllCustomers);
+
 module.exports = router;
