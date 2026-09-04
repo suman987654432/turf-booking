@@ -2,6 +2,8 @@ const db = require('../config/db');
 
 const createTables = async () => {
   const query = `
+    DROP TABLE IF EXISTS turf_amenities CASCADE;
+    DROP TABLE IF EXISTS amenities CASCADE;
     DROP TABLE IF EXISTS turf_sports CASCADE;
     DROP TABLE IF EXISTS turf_images CASCADE;
     DROP TABLE IF EXISTS sports CASCADE;
@@ -56,6 +58,14 @@ const createTables = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE amenities (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(100) UNIQUE NOT NULL,
+      icon VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'ACTIVE',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE turf_images (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       turf_id UUID NOT NULL REFERENCES turfs(id) ON DELETE CASCADE,
@@ -70,6 +80,13 @@ const createTables = async () => {
       turf_id UUID NOT NULL REFERENCES turfs(id) ON DELETE CASCADE,
       sport_id UUID NOT NULL REFERENCES sports(id) ON DELETE CASCADE,
       UNIQUE(turf_id, sport_id)
+    );
+
+    CREATE TABLE turf_amenities (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      turf_id UUID NOT NULL REFERENCES turfs(id) ON DELETE CASCADE,
+      amenity_id UUID NOT NULL REFERENCES amenities(id) ON DELETE CASCADE,
+      UNIQUE(turf_id, amenity_id)
     );
   `;
 

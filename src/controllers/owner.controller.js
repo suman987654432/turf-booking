@@ -1,7 +1,7 @@
 const db = require('../config/db');
 
 const createTurf = async (req, res) => {
-  const { name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, sports, images } = req.body;
+  const { name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, sports, amenities, images } = req.body;
   const userId = req.user.id;
 
   // Basic validation
@@ -56,6 +56,29 @@ const createTurf = async (req, res) => {
        }
     }
 
+    // 3.5 Link amenities if provided
+    if (amenities && Array.isArray(amenities) && amenities.length > 0) {
+       for (const amenityItem of amenities) {
+         let amenityId = amenityItem;
+         
+         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+         if (!uuidRegex.test(amenityItem)) {
+            const amenityResult = await client.query('SELECT id FROM amenities WHERE name ILIKE $1', [amenityItem]);
+            if (amenityResult.rows.length > 0) {
+              amenityId = amenityResult.rows[0].id;
+            } else {
+              const newAmenity = await client.query('INSERT INTO amenities (name) VALUES ($1) RETURNING id', [amenityItem]);
+              amenityId = newAmenity.rows[0].id;
+            }
+         }
+
+         await client.query(
+           'INSERT INTO turf_amenities (turf_id, amenity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+           [newTurf.id, amenityId]
+         );
+       }
+    }
+
     // 4. Insert Images to DB (URLs provided by frontend)
     let parsedImages = images;
     if (typeof images === 'string') {
@@ -82,6 +105,7 @@ const createTurf = async (req, res) => {
     await client.query('COMMIT');
     
     newTurf.sports = sports || [];
+    newTurf.amenities = amenities || [];
     newTurf.images = uploadedImages;
 
     return res.status(201).json({
@@ -119,6 +143,12 @@ const getOwnerTurfs = async (req, res) => {
            WHERE ts.turf_id = t.id), 
           '[]'
         ) AS sports,
+        COALESCE(
+          (SELECT json_agg(json_build_object('id', a.id, 'name', a.name))
+           FROM turf_amenities ta JOIN amenities a ON ta.amenity_id = a.id 
+           WHERE ta.turf_id = t.id), 
+          '[]'
+        ) AS amenities,
         COALESCE(
           (SELECT json_agg(json_build_object('id', ti.id, 'image_url', ti.image_url, 's3_key', ti.s3_key, 'sort_order', ti.sort_order) ORDER BY ti.sort_order ASC)
            FROM turf_images ti 
@@ -213,6 +243,12 @@ const updateTurf = async (req, res) => {
           JOIN sports s ON ts.sport_id = s.id
           WHERE ts.turf_id = t.id
         ) AS sports,
+        (
+          SELECT COALESCE(json_agg(json_build_object('id', a.id, 'name', a.name)), '[]')
+          FROM turf_amenities ta
+          JOIN amenities a ON ta.amenity_id = a.id
+          WHERE ta.turf_id = t.id
+        ) AS amenities,
         (
           SELECT COALESCE(json_agg(json_build_object('id', ti.id, 'image_url', ti.image_url, 's3_key', ti.s3_key, 'sort_order', ti.sort_order) ORDER BY ti.sort_order ASC), '[]')
           FROM turf_images ti
