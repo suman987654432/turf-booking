@@ -71,8 +71,8 @@ const createTurf = async (req, res) => {
         if (typeof url !== 'string' || !url.trim()) continue;
 
         const imgRes = await client.query(
-          'INSERT INTO turf_images (turf_id, image_url, is_primary, sort_order) VALUES ($1, $2, $3, $4) RETURNING *',
-          [newTurf.id, url, sortOrder === 0, sortOrder]
+          'INSERT INTO turf_images (turf_id, image_url, sort_order) VALUES ($1, $2, $3) RETURNING *',
+          [newTurf.id, url, sortOrder]
         );
         uploadedImages.push(imgRes.rows[0]);
         sortOrder++;
@@ -196,8 +196,8 @@ const updateTurf = async (req, res) => {
         if (typeof url !== 'string' || !url.trim()) continue;
         
         await db.query(
-          'INSERT INTO turf_images (turf_id, image_url, is_primary, sort_order) VALUES ($1, $2, $3, $4)',
-          [id, url, currentOrder === 0, currentOrder]
+          'INSERT INTO turf_images (turf_id, image_url, sort_order) VALUES ($1, $2, $3)',
+          [id, url, currentOrder]
         );
         currentOrder++;
       }
@@ -214,7 +214,7 @@ const updateTurf = async (req, res) => {
           WHERE ts.turf_id = t.id
         ) AS sports,
         (
-          SELECT COALESCE(json_agg(json_build_object('id', ti.id, 'url', ti.image_url, 'is_primary', ti.is_primary)), '[]')
+          SELECT COALESCE(json_agg(json_build_object('id', ti.id, 'image_url', ti.image_url, 'sort_order', ti.sort_order) ORDER BY ti.sort_order ASC), '[]')
           FROM turf_images ti
           WHERE ti.turf_id = t.id
         ) AS images
