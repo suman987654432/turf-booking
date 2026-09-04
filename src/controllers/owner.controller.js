@@ -109,20 +109,21 @@ const getOwnerTurfs = async (req, res) => {
     }
     const ownerId = ownerResult.rows[0].id;
 
-    // Fetch turfs with their associated sports
+    // Fetch turfs with their associated sports and images using subqueries to avoid cartesian products
     const query = `
       SELECT 
         t.*,
-        (
-          SELECT COALESCE(json_agg(json_build_object('id', s.id, 'name', s.name)), '[]')
-          FROM turf_sports ts
-          JOIN sports s ON ts.sport_id = s.id
-          WHERE ts.turf_id = t.id
+        COALESCE(
+          (SELECT json_agg(json_build_object('id', s.id, 'name', s.name))
+           FROM turf_sports ts JOIN sports s ON ts.sport_id = s.id 
+           WHERE ts.turf_id = t.id), 
+          '[]'
         ) AS sports,
-        (
-          SELECT COALESCE(json_agg(json_build_object('id', ti.id, 'url', ti.image_url, 'is_primary', ti.is_primary)), '[]')
-          FROM turf_images ti
-          WHERE ti.turf_id = t.id
+        COALESCE(
+          (SELECT json_agg(json_build_object('id', ti.id, 'image_url', ti.image_url, 'sort_order', ti.sort_order) ORDER BY ti.sort_order ASC)
+           FROM turf_images ti 
+           WHERE ti.turf_id = t.id), 
+          '[]'
         ) AS images
       FROM turfs t
       WHERE t.owner_id = $1
@@ -253,4 +254,47 @@ const deleteTurf = async (req, res) => {
   }
 };
 
-module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf };
+const addTurfImage = async (req, res) => {
+  const { id } = req.params; // turf_id
+  const { image_url, sort_order } = req.body;
+  const userId = req.user.id;
+
+  if (!image_url) {
+    return res.status(400).json({ success: false, message: 'image_url is required' });
+  }
+
+  try {
+    // 1. Verify turf belongs to the logged in owner
+    const turfCheck = await db.query(
+      `SELECT t.id FROM turfs t JOIN owners o ON t.owner_id = o.id WHERE t.id = $1 AND o.user_id = $2`,
+      [id, userId]
+    );
+
+    if (turfCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Turf not found or you do not have permission' });
+    }
+
+    // 2. Check if turf already has 5 images
+    const countCheck = await db.query('SELECT COUNT(*) FROM turf_images WHERE turf_id = $1', [id]);
+    if (parseInt(countCheck.rows[0].count, 10) >= 5) {
+      return res.status(400).json({ success: false, message: 'Maximum 5 images allowed per turf' });
+    }
+
+    // 3. Insert image
+    const result = await db.query(
+      'INSERT INTO turf_images (turf_id, image_url, sort_order) VALUES ($1, $2, $3) RETURNING *',
+      [id, image_url, sort_order || 0]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: 'Image added successfully',
+      data: result.rows[0]
+    });
+  } catch (err) {
+    console.error('Add Turf Image Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf, addTurfImage };
