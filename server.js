@@ -6,6 +6,7 @@ const authRoutes = require('./src/routes/auth.routes');
 const ownerRoutes = require('./src/routes/owner.routes');
 const adminRoutes = require('./src/routes/admin.routes');
 const publicRoutes = require('./src/routes/public.routes');
+const uploadRoutes = require('./src/routes/upload.routes');
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/', publicRoutes);
 app.use('/auth', authRoutes);
 app.use('/owner', ownerRoutes);
 app.use('/admin', adminRoutes);
+app.use('/api/upload', uploadRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

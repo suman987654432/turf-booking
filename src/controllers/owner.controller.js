@@ -66,13 +66,13 @@ const createTurf = async (req, res) => {
     let sortOrder = 0;
     const uploadedImages = [];
     if (parsedImages && Array.isArray(parsedImages)) {
-      for (const url of parsedImages) {
-        if (sortOrder >= 5) break; // Max 5 images
-        if (typeof url !== 'string' || !url.trim()) continue;
+      for (const img of parsedImages) {
+        if (sortOrder >= 10) break; // Max 10 images
+        if (!img || typeof img.url !== 'string' || !img.url.trim()) continue;
 
         const imgRes = await client.query(
-          'INSERT INTO turf_images (turf_id, image_url, sort_order) VALUES ($1, $2, $3) RETURNING *',
-          [newTurf.id, url, sortOrder]
+          'INSERT INTO turf_images (turf_id, image_url, s3_key, sort_order) VALUES ($1, $2, $3, $4) RETURNING *',
+          [newTurf.id, img.url, img.key || null, sortOrder]
         );
         uploadedImages.push(imgRes.rows[0]);
         sortOrder++;
@@ -120,7 +120,7 @@ const getOwnerTurfs = async (req, res) => {
           '[]'
         ) AS sports,
         COALESCE(
-          (SELECT json_agg(json_build_object('id', ti.id, 'image_url', ti.image_url, 'sort_order', ti.sort_order) ORDER BY ti.sort_order ASC)
+          (SELECT json_agg(json_build_object('id', ti.id, 'image_url', ti.image_url, 's3_key', ti.s3_key, 'sort_order', ti.sort_order) ORDER BY ti.sort_order ASC)
            FROM turf_images ti 
            WHERE ti.turf_id = t.id), 
           '[]'
@@ -192,12 +192,12 @@ const updateTurf = async (req, res) => {
       const orderRes = await db.query('SELECT COALESCE(MAX(sort_order), -1) as max_order FROM turf_images WHERE turf_id = $1', [id]);
       let currentOrder = parseInt(orderRes.rows[0].max_order) + 1;
       
-      for (const url of parsedImages) {
-        if (typeof url !== 'string' || !url.trim()) continue;
+      for (const img of parsedImages) {
+        if (!img || typeof img.url !== 'string' || !img.url.trim()) continue;
         
         await db.query(
-          'INSERT INTO turf_images (turf_id, image_url, sort_order) VALUES ($1, $2, $3)',
-          [id, url, currentOrder]
+          'INSERT INTO turf_images (turf_id, image_url, s3_key, sort_order) VALUES ($1, $2, $3, $4)',
+          [id, img.url, img.key || null, currentOrder]
         );
         currentOrder++;
       }
@@ -214,7 +214,7 @@ const updateTurf = async (req, res) => {
           WHERE ts.turf_id = t.id
         ) AS sports,
         (
-          SELECT COALESCE(json_agg(json_build_object('id', ti.id, 'image_url', ti.image_url, 'sort_order', ti.sort_order) ORDER BY ti.sort_order ASC), '[]')
+          SELECT COALESCE(json_agg(json_build_object('id', ti.id, 'image_url', ti.image_url, 's3_key', ti.s3_key, 'sort_order', ti.sort_order) ORDER BY ti.sort_order ASC), '[]')
           FROM turf_images ti
           WHERE ti.turf_id = t.id
         ) AS images
@@ -256,7 +256,7 @@ const deleteTurf = async (req, res) => {
 
 const addTurfImage = async (req, res) => {
   const { id } = req.params; // turf_id
-  const { image_url, sort_order } = req.body;
+  const { image_url, s3_key, sort_order } = req.body;
   const userId = req.user.id;
 
   if (!image_url) {
@@ -274,16 +274,16 @@ const addTurfImage = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Turf not found or you do not have permission' });
     }
 
-    // 2. Check if turf already has 5 images
+    // 2. Check if turf already has 10 images
     const countCheck = await db.query('SELECT COUNT(*) FROM turf_images WHERE turf_id = $1', [id]);
-    if (parseInt(countCheck.rows[0].count, 10) >= 5) {
-      return res.status(400).json({ success: false, message: 'Maximum 5 images allowed per turf' });
+    if (parseInt(countCheck.rows[0].count, 10) >= 10) {
+      return res.status(400).json({ success: false, message: 'Maximum 10 images allowed per turf' });
     }
 
     // 3. Insert image
     const result = await db.query(
-      'INSERT INTO turf_images (turf_id, image_url, sort_order) VALUES ($1, $2, $3) RETURNING *',
-      [id, image_url, sort_order || 0]
+      'INSERT INTO turf_images (turf_id, image_url, s3_key, sort_order) VALUES ($1, $2, $3, $4) RETURNING *',
+      [id, image_url, s3_key || null, sort_order || 0]
     );
 
     return res.status(201).json({
@@ -297,4 +297,49 @@ const addTurfImage = async (req, res) => {
   }
 };
 
-module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf, addTurfImage };
+const deleteTurfImage = async (req, res) => {
+  const { id, imageId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const ownerResult = await db.query('SELECT id FROM owners WHERE user_id = $1', [userId]);
+    if (ownerResult.rows.length === 0) return res.status(404).json({ success: false, message: 'Owner profile not found' });
+    const ownerId = ownerResult.rows[0].id;
+
+    // Verify turf belongs to this owner
+    const turfCheck = await db.query('SELECT id FROM turfs WHERE id = $1 AND owner_id = $2', [id, ownerId]);
+    if (turfCheck.rows.length === 0) return res.status(404).json({ success: false, message: 'Turf not found or you do not have permission' });
+
+    // Find image record
+    const imageResult = await db.query('SELECT s3_key FROM turf_images WHERE id = $1 AND turf_id = $2', [imageId, id]);
+    if (imageResult.rows.length === 0) return res.status(404).json({ success: false, message: 'Image not found' });
+
+    const s3Key = imageResult.rows[0].s3_key;
+
+    // Delete from S3
+    if (s3Key) {
+      const { S3Client, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+      const s3Client = new S3Client({ 
+        region: process.env.AWS_REGION,
+        credentials: {
+          accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+        }
+      });
+      await s3Client.send(new DeleteObjectCommand({
+        Bucket: process.env.AWS_S3_BUCKET || process.env.AWS_S3_AVATAR_BUCKET,
+        Key: s3Key
+      }));
+    }
+
+    // Delete from database
+    await db.query('DELETE FROM turf_images WHERE id = $1', [imageId]);
+
+    return res.status(200).json({ success: true, message: 'Image deleted successfully' });
+  } catch (err) {
+    console.error('Delete Turf Image Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf, addTurfImage, deleteTurfImage };

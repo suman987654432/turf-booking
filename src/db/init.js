@@ -60,6 +60,7 @@ const createTables = async () => {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       turf_id UUID NOT NULL REFERENCES turfs(id) ON DELETE CASCADE,
       image_url TEXT NOT NULL,
+      s3_key TEXT,
       sort_order INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
