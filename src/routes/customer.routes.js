@@ -9,6 +9,7 @@ const { authorizeRole } = require('../middlewares/role.middleware');
 router.get('/turfs', customerController.getActiveTurfs);
 router.get('/turfs/:id/slots', customerController.getTurfSlots);
 
+router.get('/profile', authenticateUser, authorizeRole(['CUSTOMER']), customerController.getProfile);
 router.put('/profile', authenticateUser, authorizeRole(['CUSTOMER']), customerController.updateProfile);
 router.get('/bookings', authenticateUser, authorizeRole(['CUSTOMER']), customerController.getCustomerBookings);
 router.post('/bookings', authenticateUser, authorizeRole(['CUSTOMER']), customerController.createBooking);

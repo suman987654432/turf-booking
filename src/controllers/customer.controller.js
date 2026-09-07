@@ -121,6 +121,23 @@ const getActiveTurfs = async (req, res) => {
   }
 };
 
+const getProfile = async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const result = await db.query(
+      'SELECT id, name, email, phone, role, status, created_at FROM users WHERE id = $1',
+      [userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    return res.status(200).json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    console.error('Get Profile Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
 const updateProfile = async (req, res) => {
   const userId = req.user.id;
   const { name, email, phone } = req.body;
@@ -464,4 +481,4 @@ const getCustomerBookings = async (req, res) => {
   }
 };
 
-module.exports = { getActiveTurfs, updateProfile, getTurfSlots, createBooking, cancelBooking, verifyPayment, getCustomerBookings };
+module.exports = { getActiveTurfs, getProfile, updateProfile, getTurfSlots, createBooking, cancelBooking, verifyPayment, getCustomerBookings };
