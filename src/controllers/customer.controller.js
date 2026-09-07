@@ -6,13 +6,14 @@ const crypto = require('crypto');
 
 // Get only ACTIVE turfs for the customer app/website
 const getActiveTurfs = async (req, res) => {
-  const { lat, lng, radius } = req.query;
+  const { lat, lng, radius, min_price, max_price, sport, date } = req.query;
 
   try {
     let selectDistance = "NULL AS distance_km";
     let whereClause = "WHERE t.status = 'ACTIVE' AND t.is_open = TRUE";
     let orderByClause = "ORDER BY t.created_at DESC";
     const queryParams = [];
+    let paramIndex = 1;
 
     if (lat && lng) {
       const parsedLat = parseFloat(lat);
@@ -23,26 +24,64 @@ const getActiveTurfs = async (req, res) => {
       selectDistance = `
         ROUND((
           6371 * acos(
-            cos(radians($1)) * cos(radians(t.latitude)) *
-            cos(radians(t.longitude) - radians($2)) +
-            sin(radians($1)) * sin(radians(t.latitude))
+            cos(radians($${paramIndex})) * cos(radians(t.latitude)) *
+            cos(radians(t.longitude) - radians($${paramIndex + 1})) +
+            sin(radians($${paramIndex})) * sin(radians(t.latitude))
           )
         )::numeric, 2) AS distance_km
       `;
       queryParams.push(parsedLat, parsedLng);
+      paramIndex += 2;
 
       if (parsedRadius) {
         whereClause += ` AND (
           6371 * acos(
-            cos(radians($1)) * cos(radians(t.latitude)) *
-            cos(radians(t.longitude) - radians($2)) +
-            sin(radians($1)) * sin(radians(t.latitude))
+            cos(radians($${paramIndex - 2})) * cos(radians(t.latitude)) *
+            cos(radians(t.longitude) - radians($${paramIndex - 1})) +
+            sin(radians($${paramIndex - 2})) * sin(radians(t.latitude))
           )
-        ) <= $3`;
+        ) <= $${paramIndex}`;
         queryParams.push(parsedRadius);
+        paramIndex += 1;
       }
 
       orderByClause = "ORDER BY distance_km ASC NULLS LAST";
+    }
+
+    // 1. Price Filter
+    if (min_price) {
+      whereClause += ` AND t.price_per_hour >= $${paramIndex}`;
+      queryParams.push(parseFloat(min_price));
+      paramIndex += 1;
+    }
+    if (max_price) {
+      whereClause += ` AND t.price_per_hour <= $${paramIndex}`;
+      queryParams.push(parseFloat(max_price));
+      paramIndex += 1;
+    }
+
+    // 2. Sport Filter
+    if (sport) {
+      whereClause += ` AND EXISTS (
+        SELECT 1 FROM turf_sports ts
+        JOIN sports s ON ts.sport_id = s.id
+        WHERE ts.turf_id = t.id AND s.name ILIKE $${paramIndex}
+      )`;
+      queryParams.push(`%${sport}%`);
+      paramIndex += 1;
+    }
+
+    // 3. Strict Date Availability Filter
+    if (date) {
+      // Check if total possible slots (close_time - open_time in hours) > confirmed bookings on that date
+      whereClause += ` AND (
+        (EXTRACT(EPOCH FROM (t.closing_time - t.opening_time)) / 3600) > (
+          SELECT COUNT(id) FROM bookings 
+          WHERE turf_id = t.id AND booking_date = $${paramIndex} AND status = 'CONFIRMED'
+        )
+      )`;
+      queryParams.push(date);
+      paramIndex += 1;
     }
 
     const query = `
