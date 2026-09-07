@@ -30,6 +30,7 @@ const razorpayWebhook = async (req, res) => {
       const paymentEntity = event.payload.payment.entity;
       const orderId = paymentEntity.order_id;
       const paymentId = paymentEntity.id;
+      const paymentMethod = paymentEntity.method || 'unknown';
 
       if (!orderId) {
         return res.status(200).send('OK'); // Acknowledge to prevent retries
@@ -41,12 +42,13 @@ const razorpayWebhook = async (req, res) => {
         SET status = 'CONFIRMED', 
             razorpay_payment_id = $1, 
             razorpay_signature = 'webhook_verified', 
+            payment_method = $2,
             updated_at = CURRENT_TIMESTAMP 
-        WHERE razorpay_order_id = $2 AND status = 'PAYMENT_PENDING'
+        WHERE razorpay_order_id = $3 AND status = 'PAYMENT_PENDING'
         RETURNING id, status
       `;
       
-      const result = await db.query(updateQuery, [paymentId, orderId]);
+      const result = await db.query(updateQuery, [paymentId, paymentMethod, orderId]);
       
       if (result.rows.length > 0) {
         console.log(`Webhook successfully updated ${result.rows.length} bookings for order ${orderId} to CONFIRMED!`);

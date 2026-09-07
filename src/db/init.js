@@ -102,6 +102,7 @@ const createTables = async () => {
       razorpay_order_id VARCHAR(255),
       razorpay_payment_id VARCHAR(255),
       razorpay_signature VARCHAR(255),
+      payment_method VARCHAR(50),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );

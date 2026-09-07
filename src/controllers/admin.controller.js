@@ -256,4 +256,55 @@ const getAllBookings = async (req, res) => {
   }
 };
 
-module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf, getSportsStats, getAllCustomers, deleteCustomer, getAllBookings };
+const getAllPayments = async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        b.id AS booking_id,
+        b.total_price AS amount,
+        b.status AS payment_status,
+        b.razorpay_order_id,
+        b.razorpay_payment_id,
+        b.payment_method,
+        b.created_at AS payment_date,
+        t.name AS turf_name,
+        o.business_name AS owner_business_name,
+        ou.name AS owner_personal_name,
+        u.name AS customer_name,
+        u.email AS customer_email
+      FROM bookings b
+      JOIN turfs t ON b.turf_id = t.id
+      JOIN owners o ON t.owner_id = o.id
+      JOIN users ou ON o.user_id = ou.id
+      JOIN users u ON b.customer_id = u.id
+      WHERE b.razorpay_order_id IS NOT NULL
+      ORDER BY b.created_at DESC
+    `;
+    const result = await db.query(query);
+
+    // Calculate some basic stats for the admin
+    let totalRevenue = 0;
+    let successfulPayments = 0;
+    result.rows.forEach(row => {
+      if (row.payment_status === 'CONFIRMED') {
+        totalRevenue += parseFloat(row.amount);
+        successfulPayments++;
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      stats: {
+        total_revenue: totalRevenue,
+        successful_payments: successfulPayments,
+        total_transactions: result.rows.length
+      },
+      data: result.rows
+    });
+  } catch (err) {
+    console.error('Admin Get All Payments Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf, getSportsStats, getAllCustomers, deleteCustomer, getAllBookings, getAllPayments };

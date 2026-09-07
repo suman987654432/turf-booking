@@ -350,16 +350,32 @@ const verifyPayment = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid payment signature' });
     }
 
-    // 2. Update all bookings linked to this order to CONFIRMED
+    // 2. Fetch Payment Method from Razorpay
+    let paymentMethod = 'unknown';
+    try {
+      if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+        const razorpay = new Razorpay({
+          key_id: process.env.RAZORPAY_KEY_ID,
+          key_secret: process.env.RAZORPAY_KEY_SECRET,
+        });
+        const paymentDetails = await razorpay.payments.fetch(razorpay_payment_id);
+        paymentMethod = paymentDetails.method || 'unknown';
+      }
+    } catch (apiErr) {
+      console.warn('Could not fetch payment details from Razorpay API:', apiErr);
+    }
+
+    // 3. Update all bookings linked to this order to CONFIRMED
     const updateResult = await db.query(
       `UPDATE bookings 
        SET status = 'CONFIRMED', 
            razorpay_payment_id = $1, 
            razorpay_signature = $2, 
+           payment_method = $3,
            updated_at = CURRENT_TIMESTAMP 
-       WHERE razorpay_order_id = $3 AND customer_id = $4 
+       WHERE razorpay_order_id = $4 AND customer_id = $5 
        RETURNING *`,
-      [razorpay_payment_id, razorpay_signature, razorpay_order_id, userId]
+      [razorpay_payment_id, razorpay_signature, paymentMethod, razorpay_order_id, userId]
     );
 
     if (updateResult.rows.length === 0) {
