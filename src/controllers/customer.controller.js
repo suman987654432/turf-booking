@@ -2,10 +2,7 @@ const db = require('../config/db');
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+// Razorpay initialized inside createBooking to prevent server crash if env keys are missing during deployment
 
 // Get only ACTIVE turfs for the customer app/website
 const getActiveTurfs = async (req, res) => {
@@ -257,6 +254,15 @@ const createBooking = async (req, res) => {
     const totalAmount = requestedSlots.length * parseFloat(turf.price_per_hour);
 
     // 5. Create Razorpay Order
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+       await client.query('ROLLBACK');
+       return res.status(500).json({ success: false, message: 'Payment gateway is not configured on this server.' });
+    }
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+
     // Razorpay receipt length must be <= 40 chars. We use a short random string + timestamp
     const shortReceipt = `rcpt_${userId.substring(0,8)}_${Date.now()}`;
     const options = {

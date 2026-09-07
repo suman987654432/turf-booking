@@ -380,9 +380,14 @@ const deleteTurfImage = async (req, res) => {
 };
 
 const getOwnerBookings = async (req, res) => {
-  const ownerId = req.user.id;
+  const userId = req.user.id;
 
   try {
+    const ownerResult = await db.query('SELECT id FROM owners WHERE user_id = $1', [userId]);
+    if (ownerResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Owner profile not found' });
+    }
+    const ownerId = ownerResult.rows[0].id;
     const query = `
       SELECT 
         b.id AS booking_id,
