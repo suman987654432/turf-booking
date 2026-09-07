@@ -463,7 +463,14 @@ const getCustomerBookings = async (req, res) => {
 
   try {
     const query = `
-      SELECT b.*, t.name as turf_name, t.address, t.city, t.latitude, t.longitude
+      SELECT 
+        b.*, 
+        t.name as turf_name, 
+        t.address, 
+        t.city, 
+        t.latitude, 
+        t.longitude,
+        (SELECT image_url FROM turf_images WHERE turf_id = t.id ORDER BY sort_order ASC LIMIT 1) AS turf_image
       FROM bookings b
       JOIN turfs t ON b.turf_id = t.id
       WHERE b.customer_id = $1
