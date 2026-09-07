@@ -433,4 +433,83 @@ const getOwnerBookings = async (req, res) => {
   }
 };
 
-module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf, addTurfImage, deleteTurfImage, getOwnerBookings };
+const getOwnerDashboardStats = async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    // Get Owner ID
+    const ownerResult = await db.query('SELECT id FROM owners WHERE user_id = $1', [userId]);
+    if (ownerResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Owner profile not found' });
+    }
+    const ownerId = ownerResult.rows[0].id;
+
+    // 1. Total Turfs (Active/Open)
+    const turfsRes = await db.query(`SELECT COUNT(id) AS count FROM turfs WHERE owner_id = $1`, [ownerId]);
+    const totalTurfs = parseInt(turfsRes.rows[0].count) || 0;
+
+    const activeTurfsRes = await db.query(`SELECT COUNT(id) AS count FROM turfs WHERE owner_id = $1 AND status = 'ACTIVE' AND is_open = TRUE`, [ownerId]);
+    const totalActiveTurfs = parseInt(activeTurfsRes.rows[0].count) || 0;
+
+    // 2. Earnings and Total Bookings
+    const bookingsRes = await db.query(`
+      SELECT 
+        COUNT(b.id) AS total_bookings,
+        SUM(CASE WHEN b.status = 'CONFIRMED' THEN b.total_price ELSE 0 END) AS total_earnings
+      FROM bookings b
+      JOIN turfs t ON b.turf_id = t.id
+      WHERE t.owner_id = $1
+    `, [ownerId]);
+    
+    const totalBookings = parseInt(bookingsRes.rows[0].total_bookings) || 0;
+    const totalEarnings = parseFloat(bookingsRes.rows[0].total_earnings) || 0;
+
+    // 3. Occupancy Rate Calculation (Turfs with at least one booking / Total Active Turfs)
+    let occupancyRate = 0;
+    if (totalActiveTurfs > 0) {
+      const bookedTurfsRes = await db.query(`
+        SELECT COUNT(DISTINCT b.turf_id) AS booked_turfs
+        FROM bookings b
+        JOIN turfs t ON b.turf_id = t.id
+        WHERE t.owner_id = $1 AND b.status = 'CONFIRMED'
+      `, [ownerId]);
+      const bookedTurfs = parseInt(bookedTurfsRes.rows[0].booked_turfs) || 0;
+      occupancyRate = (bookedTurfs / totalActiveTurfs) * 100;
+    }
+
+    // 4. Recent Top 4 Bookings
+    const recentRes = await db.query(`
+      SELECT 
+        b.id AS booking_id,
+        b.booking_date,
+        b.start_time,
+        b.status,
+        b.total_price,
+        t.name AS turf_name,
+        u.name AS customer_name
+      FROM bookings b
+      JOIN turfs t ON b.turf_id = t.id
+      JOIN users u ON b.customer_id = u.id
+      WHERE t.owner_id = $1
+      ORDER BY b.created_at DESC
+      LIMIT 4
+    `, [ownerId]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        total_earnings: totalEarnings,
+        total_bookings: totalBookings,
+        total_turfs: totalTurfs,
+        occupancy_rate: Math.round(occupancyRate * 100) / 100, // Round to 2 decimal places
+        recent_bookings: recentRes.rows
+      }
+    });
+
+  } catch (err) {
+    console.error('Owner Dashboard Stats Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf, addTurfImage, deleteTurfImage, getOwnerBookings, getOwnerDashboardStats };
