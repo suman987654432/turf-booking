@@ -8,6 +8,7 @@ const adminRoutes = require('./src/routes/admin.routes');
 const customerRoutes = require('./src/routes/customer.routes');
 const uploadRoutes = require('./src/routes/upload.routes');
 const webhookRoutes = require('./src/routes/webhook.routes');
+const notificationRoutes = require('./src/routes/notification.routes');
 
 const app = express();
 
@@ -28,9 +29,11 @@ app.get('/health', (req, res) => {
 });
 
 // Mount modular routes
+app.use('/auth', authRoutes);
 app.use('/webhooks', webhookRoutes);
 app.use('/customer', customerRoutes);
-app.use('/auth', authRoutes);
+app.use('/upload', uploadRoutes);
+app.use('/notifications', notificationRoutes);
 app.use('/owner', ownerRoutes);
 app.use('/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);

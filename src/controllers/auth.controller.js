@@ -41,6 +41,19 @@ const registerOwner = async (req, res) => {
       [newUser.id, business_name]
     );
 
+    // --- NOTIFICATION TRIGGER ---
+    // Notify the Admin about the new user registration
+    const adminRes = await client.query("SELECT id FROM users WHERE role = 'ADMIN' LIMIT 1");
+    if (adminRes.rows.length > 0) {
+      const adminId = adminRes.rows[0].id;
+      const title = 'New Turf Owner Registered';
+      const message = `${name} just joined the platform as a owner.`;
+      await client.query(
+        "INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)",
+        [adminId, title, message, 'USER_REGISTRATION']
+      );
+    }
+
     await client.query('COMMIT'); // Commit Transaction
 
     // Generate JWT
@@ -169,6 +182,18 @@ const registerCustomer = async (req, res) => {
       [name, email, password_hash, phone]
     );
     const newUser = userResult.rows[0];
+
+    // --- NOTIFICATION TRIGGER ---
+    const adminRes = await client.query("SELECT id FROM users WHERE role = 'ADMIN' LIMIT 1");
+    if (adminRes.rows.length > 0) {
+      const adminId = adminRes.rows[0].id;
+      const title = 'New Customer Registration';
+      const message = `${name} just joined the platform.`;
+      await client.query(
+        "INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)",
+        [adminId, title, message, 'USER_REGISTRATION']
+      );
+    }
 
     const token = jwt.sign(
       { userId: newUser.id, role: newUser.role },

@@ -101,6 +101,17 @@ const createTurf = async (req, res) => {
         sortOrder++;
       }
     }
+    // --- NOTIFICATION TRIGGER ---
+    const adminRes = await client.query("SELECT id FROM users WHERE role = 'ADMIN' LIMIT 1");
+    if (adminRes.rows.length > 0) {
+      const adminId = adminRes.rows[0].id;
+      const title = 'New Turf Pending Approval';
+      const message = `${name} is waiting for your review.`;
+      await client.query(
+        "INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)",
+        [adminId, title, message, 'TURF_APPROVAL']
+      );
+    }
 
     await client.query('COMMIT');
     

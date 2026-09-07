@@ -52,6 +52,30 @@ const razorpayWebhook = async (req, res) => {
       
       if (result.rows.length > 0) {
         console.log(`Webhook successfully updated ${result.rows.length} bookings for order ${orderId} to CONFIRMED!`);
+        
+        // --- NOTIFICATION TRIGGER ---
+        // Notify Owner
+        try {
+          const ownerQuery = `
+            SELECT o.user_id 
+            FROM bookings b 
+            JOIN turfs t ON b.turf_id = t.id 
+            JOIN owners o ON t.owner_id = o.id 
+            WHERE b.razorpay_order_id = $1 LIMIT 1
+          `;
+          const ownerRes = await db.query(ownerQuery, [orderId]);
+          if (ownerRes.rows.length > 0) {
+            const ownerUserId = ownerRes.rows[0].user_id;
+            const title = 'Payment Received';
+            const message = `A new payment was received for order ${orderId}.`;
+            await db.query(
+              "INSERT INTO notifications (user_id, title, message, type) VALUES ($1, $2, $3, $4)",
+              [ownerUserId, title, message, 'PAYMENT']
+            );
+          }
+        } catch (notifErr) {
+          console.error('Failed to send webhook notification:', notifErr);
+        }
       } else {
         console.log(`Webhook processed order ${orderId}, but no pending bookings were found (may have been verified by app already).`);
       }
