@@ -14,6 +14,12 @@ const getAllTurfs = async (req, res) => {
           WHERE ts.turf_id = t.id
         ) AS sports,
         (
+          SELECT COALESCE(json_agg(json_build_object('id', a.id, 'name', a.name)), '[]')
+          FROM turf_amenities ta
+          JOIN amenities a ON ta.amenity_id = a.id
+          WHERE ta.turf_id = t.id
+        ) AS amenities,
+        (
           SELECT COALESCE(json_agg(json_build_object('id', ti.id, 'image_url', ti.image_url, 'sort_order', ti.sort_order) ORDER BY ti.sort_order ASC), '[]')
           FROM turf_images ti
           WHERE ti.turf_id = t.id
