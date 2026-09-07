@@ -21,4 +21,6 @@ router.get('/sports-stats', adminController.getSportsStats);
 router.get('/customers', adminController.getAllCustomers);
 router.delete('/customers/:id', adminController.deleteCustomer);
 
+router.get('/bookings', adminController.getAllBookings);
+
 module.exports = router;

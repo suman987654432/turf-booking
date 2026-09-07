@@ -46,6 +46,7 @@ const createTables = async () => {
       opening_time TIME NOT NULL,
       closing_time TIME NOT NULL,
       status VARCHAR(50) DEFAULT 'PENDING',
+      is_open BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -87,6 +88,22 @@ const createTables = async () => {
       turf_id UUID NOT NULL REFERENCES turfs(id) ON DELETE CASCADE,
       amenity_id UUID NOT NULL REFERENCES amenities(id) ON DELETE CASCADE,
       UNIQUE(turf_id, amenity_id)
+    );
+
+    CREATE TABLE bookings (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      turf_id UUID NOT NULL REFERENCES turfs(id) ON DELETE CASCADE,
+      customer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      booking_date DATE NOT NULL,
+      start_time TIME NOT NULL,
+      end_time TIME NOT NULL,
+      status VARCHAR(50) DEFAULT 'PAYMENT_PENDING',
+      total_price DECIMAL(10, 2) NOT NULL,
+      razorpay_order_id VARCHAR(255),
+      razorpay_payment_id VARCHAR(255),
+      razorpay_signature VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `;
 

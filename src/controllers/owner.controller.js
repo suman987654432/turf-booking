@@ -1,7 +1,7 @@
 const db = require('../config/db');
 
 const createTurf = async (req, res) => {
-  const { name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, sports, amenities, images } = req.body;
+  const { name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, sports, amenities, images } = req.body || {};
   const userId = req.user.id;
 
   // Basic validation
@@ -173,7 +173,7 @@ const getOwnerTurfs = async (req, res) => {
 
 const updateTurf = async (req, res) => {
   const { id } = req.params;
-  const { name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, images } = req.body;
+  const { name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, is_open, images } = req.body || {};
   const userId = req.user.id;
 
   try {
@@ -203,11 +203,12 @@ const updateTurf = async (req, res) => {
           price_per_hour = COALESCE($9, price_per_hour),
           opening_time = COALESCE($10, opening_time),
           closing_time = COALESCE($11, closing_time),
+          is_open = COALESCE($12, is_open),
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = $12 AND owner_id = $13
+      WHERE id = $13 AND owner_id = $14
       RETURNING *
     `;
-    const updateValues = [name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, id, ownerId];
+    const updateValues = [name, description, address, city, state, pincode, latitude, longitude, price_per_hour, opening_time, closing_time, is_open, id, ownerId];
     
     const result = await db.query(updateQuery, updateValues);
     
@@ -378,4 +379,42 @@ const deleteTurfImage = async (req, res) => {
   }
 };
 
-module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf, addTurfImage, deleteTurfImage };
+const getOwnerBookings = async (req, res) => {
+  const ownerId = req.user.id;
+
+  try {
+    const query = `
+      SELECT 
+        b.id AS booking_id,
+        b.booking_date,
+        b.start_time,
+        b.end_time,
+        b.status,
+        b.total_price,
+        b.razorpay_order_id,
+        b.razorpay_payment_id,
+        t.id AS turf_id,
+        t.name AS turf_name,
+        u.id AS customer_id,
+        u.name AS customer_name,
+        u.email AS customer_email,
+        u.phone AS customer_phone
+      FROM bookings b
+      JOIN turfs t ON b.turf_id = t.id
+      JOIN users u ON b.customer_id = u.id
+      WHERE t.owner_id = $1
+      ORDER BY b.booking_date DESC, b.start_time DESC
+    `;
+    const result = await db.query(query, [ownerId]);
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows
+    });
+  } catch (err) {
+    console.error('Owner Get Bookings Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf, addTurfImage, deleteTurfImage, getOwnerBookings };

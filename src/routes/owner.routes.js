@@ -14,5 +14,6 @@ router.post('/turfs/:id/images', ownerController.addTurfImage);
 router.put('/turfs/:id', ownerController.updateTurf);
 router.delete('/turfs/:id', ownerController.deleteTurf);
 router.delete('/turfs/:id/images/:imageId', ownerController.deleteTurfImage);
+router.get('/bookings', ownerController.getOwnerBookings);
 
 module.exports = router;

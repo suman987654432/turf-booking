@@ -7,11 +7,18 @@ const ownerRoutes = require('./src/routes/owner.routes');
 const adminRoutes = require('./src/routes/admin.routes');
 const customerRoutes = require('./src/routes/customer.routes');
 const uploadRoutes = require('./src/routes/upload.routes');
+const webhookRoutes = require('./src/routes/webhook.routes');
 
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+// Capture raw body for Razorpay webhooks before parsing JSON
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 
 // --- ROUTES ---
 
@@ -21,6 +28,7 @@ app.get('/health', (req, res) => {
 });
 
 // Mount modular routes
+app.use('/webhooks', webhookRoutes);
 app.use('/customer', customerRoutes);
 app.use('/auth', authRoutes);
 app.use('/owner', ownerRoutes);

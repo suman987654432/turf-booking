@@ -219,4 +219,41 @@ const deleteCustomer = async (req, res) => {
   }
 };
 
-module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf, getSportsStats, getAllCustomers, deleteCustomer };
+const getAllBookings = async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        b.id AS booking_id,
+        b.booking_date,
+        b.start_time,
+        b.end_time,
+        b.status,
+        b.total_price,
+        b.razorpay_order_id,
+        b.razorpay_payment_id,
+        t.id AS turf_id,
+        t.name AS turf_name,
+        o.business_name AS owner_business_name,
+        u.id AS customer_id,
+        u.name AS customer_name,
+        u.email AS customer_email,
+        u.phone AS customer_phone
+      FROM bookings b
+      JOIN turfs t ON b.turf_id = t.id
+      JOIN owners o ON t.owner_id = o.id
+      JOIN users u ON b.customer_id = u.id
+      ORDER BY b.booking_date DESC, b.start_time DESC
+    `;
+    const result = await db.query(query);
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows
+    });
+  } catch (err) {
+    console.error('Admin Get All Bookings Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf, getSportsStats, getAllCustomers, deleteCustomer, getAllBookings };
