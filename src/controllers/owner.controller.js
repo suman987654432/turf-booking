@@ -477,21 +477,27 @@ const getOwnerDashboardStats = async (req, res) => {
       occupancyRate = (bookedTurfs / totalActiveTurfs) * 100;
     }
 
-    // 4. Recent Top 4 Bookings
+    // 4. Recent Top 4 Bookings (Deduplicated by turf, date, and time to hide multiple abandoned checkout attempts)
     const recentRes = await db.query(`
-      SELECT 
-        b.id AS booking_id,
-        b.booking_date,
-        b.start_time,
-        b.status,
-        b.total_price,
-        t.name AS turf_name,
-        u.name AS customer_name
-      FROM bookings b
-      JOIN turfs t ON b.turf_id = t.id
-      JOIN users u ON b.customer_id = u.id
-      WHERE t.owner_id = $1
-      ORDER BY b.created_at DESC
+      SELECT booking_id, booking_date, start_time, status, total_price, turf_name, customer_name
+      FROM (
+        SELECT 
+          b.id AS booking_id,
+          b.booking_date,
+          b.start_time,
+          b.status,
+          b.total_price,
+          t.name AS turf_name,
+          u.name AS customer_name,
+          b.created_at,
+          ROW_NUMBER() OVER(PARTITION BY b.turf_id, b.booking_date, b.start_time ORDER BY b.created_at DESC) as rn
+        FROM bookings b
+        JOIN turfs t ON b.turf_id = t.id
+        JOIN users u ON b.customer_id = u.id
+        WHERE t.owner_id = $1
+      ) sub
+      WHERE rn = 1
+      ORDER BY created_at DESC
       LIMIT 4
     `, [ownerId]);
 
