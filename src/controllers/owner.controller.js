@@ -518,4 +518,83 @@ const getOwnerDashboardStats = async (req, res) => {
   }
 };
 
-module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf, addTurfImage, deleteTurfImage, getOwnerBookings, getOwnerDashboardStats };
+const getOwnerProfile = async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const query = `
+      SELECT u.id as user_id, o.id as owner_id, u.name, u.email, u.phone, o.business_name
+      FROM users u
+      JOIN owners o ON u.id = o.user_id
+      WHERE u.id = $1
+    `;
+    const result = await db.query(query, [userId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Owner profile not found' });
+    }
+    return res.status(200).json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    console.error('Get Owner Profile Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+const updateOwnerProfile = async (req, res) => {
+  const userId = req.user.id;
+  const { name, email, phone, business_name } = req.body;
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Update users table (name, email, phone)
+    let userUpdateQuery = 'UPDATE users SET ';
+    const userUpdateValues = [];
+    let userParamIndex = 1;
+    
+    if (name) {
+      userUpdateQuery += `name = $${userParamIndex++}, `;
+      userUpdateValues.push(name);
+    }
+    if (email) {
+      userUpdateQuery += `email = $${userParamIndex++}, `;
+      userUpdateValues.push(email);
+    }
+    if (phone !== undefined) {
+      userUpdateQuery += `phone = $${userParamIndex++}, `;
+      userUpdateValues.push(phone);
+    }
+
+    if (userUpdateValues.length > 0) {
+      userUpdateQuery = userUpdateQuery.slice(0, -2); // remove last comma and space
+      userUpdateQuery += ` WHERE id = $${userParamIndex}`;
+      userUpdateValues.push(userId);
+      await client.query(userUpdateQuery, userUpdateValues);
+    }
+
+    // Update owners table (business_name)
+    if (business_name) {
+      await client.query('UPDATE owners SET business_name = $1 WHERE user_id = $2', [business_name, userId]);
+    }
+
+    await client.query('COMMIT');
+
+    // Fetch the updated profile
+    const updatedProfile = await client.query(`
+      SELECT u.id as user_id, o.id as owner_id, u.name, u.email, u.phone, o.business_name
+      FROM users u
+      JOIN owners o ON u.id = o.user_id
+      WHERE u.id = $1
+    `, [userId]);
+
+    return res.status(200).json({ success: true, message: 'Profile updated successfully', data: updatedProfile.rows[0] });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Update Owner Profile Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+};
+
+module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf, addTurfImage, deleteTurfImage, getOwnerBookings, getOwnerDashboardStats, getOwnerProfile, updateOwnerProfile };

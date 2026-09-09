@@ -16,5 +16,6 @@ router.delete('/turfs/:id', ownerController.deleteTurf);
 router.delete('/turfs/:id/images/:imageId', ownerController.deleteTurfImage);
 router.get('/bookings', ownerController.getOwnerBookings);
 router.get('/dashboard', ownerController.getOwnerDashboardStats);
-
+router.get('/profile', ownerController.getOwnerProfile);
+router.put('/profile', ownerController.updateOwnerProfile);
 module.exports = router;
