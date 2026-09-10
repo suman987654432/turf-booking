@@ -511,4 +511,83 @@ const getCustomerBookings = async (req, res) => {
   }
 };
 
-module.exports = { getActiveTurfs, getProfile, updateProfile, getTurfSlots, createBooking, cancelBooking, verifyPayment, getCustomerBookings };
+const rescheduleBooking = async (req, res) => {
+  const { id } = req.params; // booking_id
+  const userId = req.user.id;
+  const { date, start_time, end_time } = req.body;
+
+  if (!date || !start_time || !end_time) {
+    return res.status(400).json({ success: false, message: 'date, start_time, and end_time are required' });
+  }
+
+  // Prevent rescheduling to the past
+  let formattedStartTime = start_time;
+  if (formattedStartTime.length === 5) formattedStartTime += ':00';
+  let formattedEndTime = end_time;
+  if (formattedEndTime.length === 5) formattedEndTime += ':00';
+
+  const [sh, sm, ss] = formattedStartTime.split(':').map(Number);
+  const [y, m, d] = date.split('-').map(Number);
+  const newBookingDateLocal = new Date(y, m - 1, d, sh, sm, ss || 0);
+  
+  if (newBookingDateLocal < new Date()) {
+    return res.status(400).json({ success: false, message: 'Cannot reschedule to a time slot in the past' });
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Fetch the booking to verify ownership and get turf_id
+    const bookingResult = await client.query('SELECT turf_id, status FROM bookings WHERE id = $1 AND customer_id = $2 FOR UPDATE', [id, userId]);
+    
+    if (bookingResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    const booking = bookingResult.rows[0];
+    if (booking.status !== 'CONFIRMED') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'Only CONFIRMED bookings can be rescheduled' });
+    }
+
+    // 2. Check for conflicts
+    const conflictResult = await client.query(
+      `SELECT id FROM bookings 
+       WHERE turf_id = $1 AND booking_date = $2 AND status = 'CONFIRMED' AND id != $3
+       AND start_time < $4 AND end_time > $5`,
+      [booking.turf_id, date, id, formattedEndTime, formattedStartTime]
+    );
+
+    if (conflictResult.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, message: 'The selected time slot is already booked!' });
+    }
+
+    // 3. Update the booking
+    const updateResult = await client.query(
+      `UPDATE bookings 
+       SET booking_date = $1, start_time = $2, end_time = $3, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4
+       RETURNING *`,
+      [date, formattedStartTime, formattedEndTime, id]
+    );
+
+    await client.query('COMMIT');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Booking rescheduled successfully',
+      data: updateResult.rows[0]
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Customer Reschedule Booking Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+};
+
+module.exports = { getActiveTurfs, getProfile, updateProfile, getTurfSlots, createBooking, cancelBooking, verifyPayment, getCustomerBookings, rescheduleBooking };

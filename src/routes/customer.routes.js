@@ -15,5 +15,6 @@ router.get('/bookings', authenticateUser, authorizeRole(['CUSTOMER']), customerC
 router.post('/bookings', authenticateUser, authorizeRole(['CUSTOMER']), customerController.createBooking);
 router.post('/bookings/verify-payment', authenticateUser, authorizeRole(['CUSTOMER']), customerController.verifyPayment);
 router.patch('/bookings/:id/cancel', authenticateUser, authorizeRole(['CUSTOMER']), customerController.cancelBooking);
+router.put('/bookings/:id/reschedule', authenticateUser, authorizeRole(['CUSTOMER']), customerController.rescheduleBooking);
 
 module.exports = router;
