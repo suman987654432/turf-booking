@@ -69,8 +69,8 @@ const registerOwner = async (req, res) => {
 
     await client.query('COMMIT'); // Commit Transaction
 
-    // Send Verification Email
-    await sendVerificationEmail(email, verificationCode);
+    // Send Verification Email asynchronously
+    sendVerificationEmail(email, verificationCode).catch(err => console.error('Background Email Error:', err));
 
     return res.status(201).json({
       success: true,
@@ -219,8 +219,8 @@ const registerCustomer = async (req, res) => {
       );
     }
 
-    // Send Verification Email
-    await sendVerificationEmail(email, verificationCode);
+    // Send Verification Email asynchronously
+    sendVerificationEmail(email, verificationCode).catch(err => console.error('Background Email Error:', err));
 
     return res.status(201).json({
       success: true,
@@ -374,7 +374,7 @@ const resendVerificationCode = async (req, res) => {
       [newCode, newExpires, email]
     );
 
-    await sendVerificationEmail(email, newCode);
+    sendVerificationEmail(email, newCode).catch(err => console.error('Background Email Error:', err));
 
     return res.status(200).json({
       success: true,
