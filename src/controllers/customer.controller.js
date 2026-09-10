@@ -496,7 +496,7 @@ const getCustomerBookings = async (req, res) => {
         (SELECT image_url FROM turf_images WHERE turf_id = t.id ORDER BY sort_order ASC LIMIT 1) AS turf_image
       FROM bookings b
       JOIN turfs t ON b.turf_id = t.id
-      WHERE b.customer_id = $1
+      WHERE b.customer_id = $1 AND b.status != 'PAYMENT_PENDING'
       ORDER BY b.booking_date DESC, b.start_time DESC
     `;
     const result = await db.query(query, [userId]);
