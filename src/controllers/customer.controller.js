@@ -6,9 +6,13 @@ const crypto = require('crypto');
 
 // Get only ACTIVE turfs for the customer app/website
 const getActiveTurfs = async (req, res) => {
-  const { lat, lng, radius, min_price, max_price, sport, date } = req.query;
+  const { lat, lng, radius, min_price, max_price, sport, date, page = 1, limit = 5 } = req.query;
 
   try {
+    const parsedLimit = parseInt(limit, 10) || 5;
+    const parsedPage = parseInt(page, 10) || 1;
+    const offset = (parsedPage - 1) * parsedLimit;
+
     let selectDistance = "NULL AS distance_km";
     let whereClause = "WHERE t.status = 'ACTIVE' AND t.is_open = TRUE";
     let orderByClause = "ORDER BY t.created_at DESC";
@@ -87,6 +91,7 @@ const getActiveTurfs = async (req, res) => {
     const query = `
       SELECT 
         t.*,
+        COUNT(t.id) OVER() as total_count,
         ${selectDistance},
         (
           SELECT COALESCE(json_agg(json_build_object('id', s.id, 'name', s.name)), '[]')
@@ -108,12 +113,30 @@ const getActiveTurfs = async (req, res) => {
       FROM turfs t
       ${whereClause}
       ${orderByClause}
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
+    
+    queryParams.push(parsedLimit, offset);
+    
     const turfResult = await db.query(query, queryParams);
+
+    const total = turfResult.rows.length > 0 ? parseInt(turfResult.rows[0].total_count) : 0;
+    
+    // Remove total_count from each row object before sending
+    const data = turfResult.rows.map(row => {
+      const { total_count, ...rest } = row;
+      return rest;
+    });
 
     return res.status(200).json({
       success: true,
-      data: turfResult.rows
+      data: data,
+      meta: {
+        total,
+        page: parsedPage,
+        limit: parsedLimit,
+        total_pages: Math.ceil(total / parsedLimit)
+      }
     });
   } catch (err) {
     console.error('Customer Get Turfs Error:', err);

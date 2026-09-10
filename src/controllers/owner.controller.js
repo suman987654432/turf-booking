@@ -148,6 +148,7 @@ const getOwnerTurfs = async (req, res) => {
     const query = `
       SELECT 
         t.*,
+        COALESCE((SELECT COUNT(b.id) FROM bookings b WHERE b.turf_id = t.id AND b.status = 'CONFIRMED'), 0)::int AS bookings_count,
         COALESCE(
           (SELECT json_agg(json_build_object('id', s.id, 'name', s.name))
            FROM turf_sports ts JOIN sports s ON ts.sport_id = s.id 
@@ -392,8 +393,13 @@ const deleteTurfImage = async (req, res) => {
 
 const getOwnerBookings = async (req, res) => {
   const userId = req.user.id;
+  const { page = 1, limit = 5 } = req.query;
 
   try {
+    const parsedLimit = parseInt(limit, 10) || 5;
+    const parsedPage = parseInt(page, 10) || 1;
+    const offset = (parsedPage - 1) * parsedLimit;
+
     const ownerResult = await db.query('SELECT id FROM owners WHERE user_id = $1', [userId]);
     if (ownerResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Owner profile not found' });
@@ -401,6 +407,7 @@ const getOwnerBookings = async (req, res) => {
     const ownerId = ownerResult.rows[0].id;
     const query = `
       SELECT 
+        COUNT(b.id) OVER() as total_count,
         b.id AS booking_id,
         b.booking_date,
         b.start_time,
@@ -420,12 +427,27 @@ const getOwnerBookings = async (req, res) => {
       JOIN users u ON b.customer_id = u.id
       WHERE t.owner_id = $1
       ORDER BY b.booking_date DESC, b.start_time DESC
+      LIMIT $2 OFFSET $3
     `;
-    const result = await db.query(query, [ownerId]);
+    const result = await db.query(query, [ownerId, parsedLimit, offset]);
+
+    const total = result.rows.length > 0 ? parseInt(result.rows[0].total_count) : 0;
+    
+    // Remove total_count from each row object before sending
+    const data = result.rows.map(row => {
+      const { total_count, ...rest } = row;
+      return rest;
+    });
 
     return res.status(200).json({
       success: true,
-      data: result.rows
+      data: data,
+      meta: {
+        total,
+        page: parsedPage,
+        limit: parsedLimit,
+        total_pages: Math.ceil(total / parsedLimit)
+      }
     });
   } catch (err) {
     console.error('Owner Get Bookings Error:', err);
