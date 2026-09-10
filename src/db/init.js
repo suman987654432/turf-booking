@@ -20,6 +20,9 @@ const createTables = async () => {
       phone VARCHAR(20),
       role VARCHAR(50) DEFAULT 'CUSTOMER',
       status VARCHAR(50) DEFAULT 'ACTIVE',
+      is_verified BOOLEAN DEFAULT FALSE,
+      verification_code VARCHAR(6),
+      verification_code_expires TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );

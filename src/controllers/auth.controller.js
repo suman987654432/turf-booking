@@ -1,6 +1,15 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
+const { sendVerificationEmail } = require('../utils/email');
+
+const generateVerificationCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+const getExpirationTime = () => {
+  return new Date(Date.now() + 15 * 60 * 1000); // 15 minutes from now
+};
 
 const registerOwner = async (req, res) => {
   const { name, email, password, business_name, phone } = req.body;
@@ -26,11 +35,15 @@ const registerOwner = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
 
+    // Generate Verification Code
+    const verificationCode = generateVerificationCode();
+    const verificationExpires = getExpirationTime();
+
     // 3. Insert into users
     const userResult = await client.query(
-      `INSERT INTO users (name, email, password_hash, phone, role) 
-       VALUES ($1, $2, $3, $4, 'OWNER') RETURNING id, name, email, role`,
-      [name, email, password_hash, phone]
+      `INSERT INTO users (name, email, password_hash, phone, role, verification_code, verification_code_expires, is_verified) 
+       VALUES ($1, $2, $3, $4, 'OWNER', $5, $6, false) RETURNING id, name, email, role`,
+      [name, email, password_hash, phone, verificationCode, verificationExpires]
     );
     const newUser = userResult.rows[0];
 
@@ -56,18 +69,13 @@ const registerOwner = async (req, res) => {
 
     await client.query('COMMIT'); // Commit Transaction
 
-    // Generate JWT
-    const token = jwt.sign(
-      { userId: newUser.id, role: newUser.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    // Send Verification Email
+    await sendVerificationEmail(email, verificationCode);
 
     return res.status(201).json({
       success: true,
-      message: 'Owner registered successfully. Awaiting admin verification.',
-      token,
-      data: newUser
+      message: 'Owner registered successfully. Please check your email for the verification code.',
+      email: newUser.email
     });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -92,6 +100,17 @@ const loginOwner = async (req, res) => {
     }
 
     const user = userResult.rows[0];
+
+    // Check if verified
+    if (!user.is_verified) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Please verify your email before logging in.', 
+        is_verified: false,
+        email: user.email 
+      });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!isMatch) {
@@ -105,8 +124,10 @@ const loginOwner = async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    // Remove password_hash from response
+    // Remove sensitive data
     delete user.password_hash;
+    delete user.verification_code;
+    delete user.verification_code_expires;
 
     return res.status(200).json({
       success: true,
@@ -176,10 +197,13 @@ const registerCustomer = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
 
+    const verificationCode = generateVerificationCode();
+    const verificationExpires = getExpirationTime();
+
     const userResult = await client.query(
-      `INSERT INTO users (name, email, password_hash, phone, role) 
-       VALUES ($1, $2, $3, $4, 'CUSTOMER') RETURNING id, name, email, role`,
-      [name, email, password_hash, phone]
+      `INSERT INTO users (name, email, password_hash, phone, role, verification_code, verification_code_expires, is_verified) 
+       VALUES ($1, $2, $3, $4, 'CUSTOMER', $5, $6, false) RETURNING id, name, email, role`,
+      [name, email, password_hash, phone, verificationCode, verificationExpires]
     );
     const newUser = userResult.rows[0];
 
@@ -195,17 +219,13 @@ const registerCustomer = async (req, res) => {
       );
     }
 
-    const token = jwt.sign(
-      { userId: newUser.id, role: newUser.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    // Send Verification Email
+    await sendVerificationEmail(email, verificationCode);
 
     return res.status(201).json({
       success: true,
-      message: 'Customer registered successfully.',
-      token,
-      data: newUser
+      message: 'Customer registered successfully. Please check your email for the verification code.',
+      email: newUser.email
     });
   } catch (err) {
     console.error('Customer Registration Error:', err);
@@ -229,6 +249,17 @@ const loginCustomer = async (req, res) => {
     }
 
     const user = userResult.rows[0];
+
+    // Check if verified
+    if (!user.is_verified) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Please verify your email before logging in.', 
+        is_verified: false,
+        email: user.email 
+      });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!isMatch) {
@@ -242,6 +273,8 @@ const loginCustomer = async (req, res) => {
     );
 
     delete user.password_hash;
+    delete user.verification_code;
+    delete user.verification_code_expires;
 
     return res.status(200).json({
       success: true,
@@ -254,4 +287,111 @@ const loginCustomer = async (req, res) => {
   }
 };
 
-module.exports = { registerOwner, loginOwner, loginAdmin, registerCustomer, loginCustomer };
+const verifyEmail = async (req, res) => {
+  const { email, code } = req.body;
+
+  if (!email || !code) {
+    return res.status(400).json({ success: false, message: 'Email and verification code are required' });
+  }
+
+  try {
+    const userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+
+    if (user.is_verified) {
+      return res.status(400).json({ success: false, message: 'Email is already verified' });
+    }
+
+    if (user.verification_code !== code) {
+      return res.status(400).json({ success: false, message: 'Invalid verification code' });
+    }
+
+    if (new Date(user.verification_code_expires) < new Date()) {
+      return res.status(400).json({ success: false, message: 'Verification code has expired. Please request a new one.' });
+    }
+
+    // Update user to verified
+    const updatedUserResult = await db.query(
+      `UPDATE users 
+       SET is_verified = true, verification_code = null, verification_code_expires = null 
+       WHERE email = $1 RETURNING *`,
+      [email]
+    );
+
+    const updatedUser = updatedUserResult.rows[0];
+
+    // Generate JWT now that they are verified
+    const token = jwt.sign(
+      { userId: updatedUser.id, role: updatedUser.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    delete updatedUser.password_hash;
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email verified successfully',
+      token,
+      data: updatedUser
+    });
+  } catch (err) {
+    console.error('Verify Email Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+const resendVerificationCode = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ success: false, message: 'Email is required' });
+  }
+
+  try {
+    const userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+
+    if (user.is_verified) {
+      return res.status(400).json({ success: false, message: 'Email is already verified' });
+    }
+
+    const newCode = generateVerificationCode();
+    const newExpires = getExpirationTime();
+
+    await db.query(
+      `UPDATE users 
+       SET verification_code = $1, verification_code_expires = $2 
+       WHERE email = $3`,
+      [newCode, newExpires, email]
+    );
+
+    await sendVerificationEmail(email, newCode);
+
+    return res.status(200).json({
+      success: true,
+      message: 'A new verification code has been sent to your email.'
+    });
+  } catch (err) {
+    console.error('Resend Code Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { 
+  registerOwner, 
+  loginOwner, 
+  loginAdmin, 
+  registerCustomer, 
+  loginCustomer,
+  verifyEmail,
+  resendVerificationCode
+};
