@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 
 const authRoutes = require('./src/routes/auth.routes');
 const ownerRoutes = require('./src/routes/owner.routes');
@@ -13,6 +14,7 @@ const notificationRoutes = require('./src/routes/notification.routes');
 const app = express();
 
 app.use(cors());
+app.use(compression());
 app.use(express.urlencoded({ extended: true }));
 // Capture raw body for Razorpay webhooks before parsing JSON
 app.use(express.json({

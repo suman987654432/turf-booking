@@ -1,45 +1,137 @@
 const nodemailer = require('nodemailer');
-const dns = require('dns');
 
-// Force IPv4 DNS resolution to fix Render ENETUNREACH IPv6 errors
-dns.setDefaultResultOrder('ipv4first');
+/**
+ * Create reusable Nodemailer SMTP Transporter
+ */
+const createTransporter = () => {
+  const user = (process.env.SMTP_USER || '').trim();
+  const pass = (process.env.SMTP_PASS || '').replace(/\s+/g, '').trim();
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
+  
+  if (user && pass) {
+    const isSecure = port === 465;
+    return nodemailer.createTransport({
+      host,
+      port,
+      secure: isSecure,
+      auth: {
+        user,
+        pass
+      },
+      tls: {
+        rejectUnauthorized: false
+      },
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
+      family: 4, // Force IPv4 to prevent ENETUNREACH on Render
+    });
+  }
+  return null;
+};
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  family: 4, // Force IPv4 to prevent ENETUNREACH on Render
-});
-
+/**
+ * Send Verification Email via Nodemailer SMTP
+ */
 const sendVerificationEmail = async (toEmail, code) => {
-  try {
-    const mailOptions = {
-      from: `"Turf Booking" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-      to: toEmail,
-      subject: 'Account Verification Code',
-      text: `Your verification code is: ${code}. It will expire in 15 minutes.`,
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px;">
-          <h2>Verify Your Account</h2>
-          <p>Thank you for signing up!</p>
-          <p>Your 6-digit verification code is:</p>
-          <h1 style="color: #4CAF50; letter-spacing: 5px;">${code}</h1>
-          <p>This code will expire in 15 minutes.</p>
-          <p>If you didn't request this, you can ignore this email.</p>
-        </div>
-      `,
-    };
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Verification</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f8fafc; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 520px; background-color: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #e2e8f0;">
+          <!-- Header -->
+          <tr>
+            <td align="center" style="background-color: #10b981; padding: 36px 25px;">
+              <div style="font-size: 26px; font-weight: 900; letter-spacing: 3px; color: #ffffff; text-transform: uppercase;">
+                TURF BOOKING
+              </div>
+              <div style="margin-top: 7px; font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #d1fae5; text-transform: uppercase;">
+                Account Verification
+              </div>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td align="center" style="padding: 40px 30px;">
+              <div style="font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 12px;">
+                Verify Your Account
+              </div>
+              <div style="font-size: 14px; line-height: 1.7; color: #475569; margin-bottom: 28px;">
+                Thank you for joining Turf Booking! Use the verification code below to complete your registration.
+              </div>
+              <!-- OTP Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f0fdf4; border: 2px dashed #34d399; border-radius: 16px;">
+                <tr>
+                  <td align="center" style="padding: 20px 15px;">
+                    <div style="font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: #059669; text-transform: uppercase; margin-bottom: 8px;">
+                      Your Verification Code
+                    </div>
+                    <div style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #10b981; padding-left: 8px;">
+                      ${code}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+              <!-- Expiry -->
+              <div style="margin-top: 20px; font-size: 13px; color: #64748b; line-height: 1.6;">
+                This verification code will expire in <strong style="color: #334155;">15 minutes</strong>.
+              </div>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="background-color: #f1f5f9; border-top: 1px solid #e2e8f0; padding: 22px 25px;">
+              <div style="font-size: 12px; color: #64748b; line-height: 1.6;">
+                &copy; ${new Date().getFullYear()} Turf Booking. All rights reserved.
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Verification email sent:', info.messageId);
+  const transporter = createTransporter();
+  
+  if (transporter) {
+    try {
+      let rawEmail = (process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@turfbooking.com').trim();
+      // Ensure we extract just the email if it contains brackets, so we can force our custom name
+      if (rawEmail.includes('<')) {
+        rawEmail = rawEmail.split('<')[1].replace('>', '');
+      }
+      const fromHeader = `"Turf Booking" <${rawEmail}>`;
+      
+      const info = await transporter.sendMail({
+        from: fromHeader,
+        to: toEmail,
+        subject: `✅ ${code} is your Turf Booking Verification Code`,
+        html: htmlContent,
+      });
+      
+      console.log(`\n========================================\n📧 [NODEMAILER SMTP EMAIL SENT SUCCESS]\nMessage ID: ${info.messageId}\nRecipient: ${toEmail}\nOTP Code: ${code}\n========================================\n`);
+      return true;
+    } catch (err) {
+      console.error('❌ Nodemailer SMTP Send Error:', err.message || err);
+      return false;
+    }
+  } else {
+    // DEMO MODE - Just log it if no SMTP credentials are provided
+    console.log(`\n========================================\n📧 [NODEMAILER SMTP DEMO / LOG MODE]\nRecipient: ${toEmail}\nOTP Code: ${code}\n(Note: Set SMTP_USER and SMTP_PASS in .env for live SMTP delivery)\n========================================\n`);
     return true;
-  } catch (error) {
-    console.error('Error sending verification email:', error);
-    return false;
   }
 };
 
