@@ -24,4 +24,7 @@ router.delete('/customers/:id', adminController.deleteCustomer);
 router.get('/bookings', adminController.getAllBookings);
 router.get('/payments', adminController.getAllPayments);
 
+router.get('/queries', adminController.getAllQueries);
+router.patch('/queries/:id/reply', adminController.replyToQuery);
+
 module.exports = router;

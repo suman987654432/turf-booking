@@ -597,4 +597,58 @@ const updateOwnerProfile = async (req, res) => {
   }
 };
 
-module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf, addTurfImage, deleteTurfImage, getOwnerBookings, getOwnerDashboardStats, getOwnerProfile, updateOwnerProfile };
+const submitQuery = async (req, res) => {
+  const { subject, message } = req.body;
+  const userId = req.user.id;
+
+  if (!subject || !message) {
+    return res.status(400).json({ success: false, message: 'Subject and message are required' });
+  }
+
+  try {
+    const ownerResult = await db.query('SELECT id FROM owners WHERE user_id = $1', [userId]);
+    if (ownerResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Owner profile not found' });
+    }
+    const ownerId = ownerResult.rows[0].id;
+
+    const query = `
+      INSERT INTO owner_queries (owner_id, subject, message)
+      VALUES ($1, $2, $3)
+      RETURNING *
+    `;
+    const result = await db.query(query, [ownerId, subject, message]);
+
+    return res.status(201).json({ success: true, message: 'Query submitted successfully', data: result.rows[0] });
+  } catch (err) {
+    console.error('Submit Query Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+const getQueries = async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    const ownerResult = await db.query('SELECT id FROM owners WHERE user_id = $1', [userId]);
+    if (ownerResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Owner profile not found' });
+    }
+    const ownerId = ownerResult.rows[0].id;
+
+    const query = `
+      SELECT id, subject, message, admin_reply, status, created_at, updated_at
+      FROM owner_queries
+      WHERE owner_id = $1
+      ORDER BY created_at DESC
+    `;
+    const result = await db.query(query, [ownerId]);
+
+    return res.status(200).json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error('Get Queries Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { createTurf, getOwnerTurfs, updateTurf, deleteTurf, addTurfImage, deleteTurfImage, getOwnerBookings, getOwnerDashboardStats, getOwnerProfile, updateOwnerProfile, submitQuery, getQueries };

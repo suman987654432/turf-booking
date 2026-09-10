@@ -10,6 +10,7 @@ const createTables = async () => {
     DROP TABLE IF EXISTS turfs CASCADE;
     DROP TABLE IF EXISTS owners CASCADE;
     DROP TABLE IF EXISTS users CASCADE;
+    DROP TABLE IF EXISTS owner_queries CASCADE;
 
     CREATE TABLE users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -27,6 +28,17 @@ const createTables = async () => {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       business_name VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE owner_queries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      owner_id UUID NOT NULL REFERENCES owners(id) ON DELETE CASCADE,
+      subject VARCHAR(255) NOT NULL,
+      message TEXT NOT NULL,
+      admin_reply TEXT,
+      status VARCHAR(50) DEFAULT 'PENDING',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );

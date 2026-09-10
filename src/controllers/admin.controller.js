@@ -313,4 +313,70 @@ const getAllPayments = async (req, res) => {
   }
 };
 
-module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf, getSportsStats, getAllCustomers, deleteCustomer, getAllBookings, getAllPayments };
+const getAllQueries = async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        q.id,
+        q.subject,
+        q.message,
+        q.admin_reply,
+        q.status,
+        q.created_at,
+        q.updated_at,
+        o.id AS owner_id,
+        o.business_name,
+        u.name AS owner_name,
+        u.email AS owner_email
+      FROM owner_queries q
+      JOIN owners o ON q.owner_id = o.id
+      JOIN users u ON o.user_id = u.id
+      ORDER BY q.created_at DESC
+    `;
+    const result = await db.query(query);
+
+    return res.status(200).json({
+      success: true,
+      data: result.rows
+    });
+  } catch (err) {
+    console.error('Admin Get All Queries Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+const replyToQuery = async (req, res) => {
+  const { id } = req.params;
+  const { admin_reply, status } = req.body;
+
+  if (!admin_reply) {
+    return res.status(400).json({ success: false, message: 'Admin reply is required' });
+  }
+
+  try {
+    const updateQuery = `
+      UPDATE owner_queries 
+      SET admin_reply = $1, 
+          status = COALESCE($2, 'ANSWERED'),
+          updated_at = CURRENT_TIMESTAMP 
+      WHERE id = $3 
+      RETURNING *
+    `;
+    const result = await db.query(updateQuery, [admin_reply, status || 'ANSWERED', id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Query not found' });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Replied to query successfully',
+      data: result.rows[0]
+    });
+  } catch (err) {
+    console.error('Admin Reply To Query Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+module.exports = { getAllTurfs, approveTurf, rejectTurf, getAllOwners, deleteOwner, deleteTurf, getSportsStats, getAllCustomers, deleteCustomer, getAllBookings, getAllPayments, getAllQueries, replyToQuery };
