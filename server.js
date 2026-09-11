@@ -30,6 +30,15 @@ app.get('/health', (req, res) => {
   res.json({ success: true, message: 'Server is running' });
 });
 
+// Dummy test API
+app.get('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Test API is working perfectly!',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Mount modular routes
 app.use('/auth', authRoutes);
 app.use('/webhooks', webhookRoutes);
