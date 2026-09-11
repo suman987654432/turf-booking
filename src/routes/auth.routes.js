@@ -9,5 +9,7 @@ router.post('/customer/signup', authController.registerCustomer);
 router.post('/customer/login', authController.loginCustomer);
 router.post('/verify-email', authController.verifyEmail);
 router.post('/resend-verification', authController.resendVerificationCode);
+router.post('/forgot-password', authController.forgotPassword);
+router.post('/reset-password', authController.resetPassword);
 
 module.exports = router;

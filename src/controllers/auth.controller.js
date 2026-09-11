@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
-const { sendVerificationEmail } = require('../utils/email');
+const { sendVerificationEmail, sendForgotPasswordEmail } = require('../utils/email');
 
 const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -386,6 +386,84 @@ const resendVerificationCode = async (req, res) => {
   }
 };
 
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ success: false, message: 'Email is required' });
+  }
+
+  try {
+    const userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const resetCode = generateVerificationCode();
+    const resetExpires = getExpirationTime();
+
+    await db.query(
+      `UPDATE users 
+       SET verification_code = $1, verification_code_expires = $2 
+       WHERE email = $3`,
+      [resetCode, resetExpires, email]
+    );
+
+    sendForgotPasswordEmail(email, resetCode).catch(err => console.error('Background Email Error:', err));
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password reset code has been sent to your email.'
+    });
+  } catch (err) {
+    console.error('Forgot Password Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  const { email, code, newPassword } = req.body;
+
+  if (!email || !code || !newPassword) {
+    return res.status(400).json({ success: false, message: 'Email, code, and new password are required' });
+  }
+
+  try {
+    const userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const user = userResult.rows[0];
+
+    if (user.verification_code !== code) {
+      return res.status(400).json({ success: false, message: 'Invalid reset code' });
+    }
+
+    if (new Date(user.verification_code_expires) < new Date()) {
+      return res.status(400).json({ success: false, message: 'Reset code has expired. Please request a new one.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(newPassword, salt);
+
+    await db.query(
+      `UPDATE users 
+       SET password_hash = $1, verification_code = null, verification_code_expires = null 
+       WHERE email = $2`,
+      [password_hash, email]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password has been reset successfully.'
+    });
+  } catch (err) {
+    console.error('Reset Password Error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
 module.exports = { 
   registerOwner, 
   loginOwner, 
@@ -393,5 +471,7 @@ module.exports = {
   registerCustomer, 
   loginCustomer,
   verifyEmail,
-  resendVerificationCode
+  resendVerificationCode,
+  forgotPassword,
+  resetPassword
 };
