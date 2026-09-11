@@ -34,4 +34,6 @@ jobs:
         run: npm install -g pm2
 
       - name: Restart Backend Server
+        env:
+          RUNNER_TRACKING_ID: ""
         run: pm2 start server.js --name "turf-backend" --update-env || pm2 reload "turf-backend" --update-env
