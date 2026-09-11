@@ -31,4 +31,4 @@ jobs:
           EOF
 
       - name: Restart Backend Server
-        run: pm2 restart all            
+        run: pm2 start server.js --name "turf-backend" --update-env || pm2 reload "turf-backend" --update-env
