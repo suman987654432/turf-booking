@@ -1,0 +1,34 @@
+name: Node.js CI
+
+on:
+  push:
+    branches: ["suman-backend"]
+
+jobs:
+  build:
+    runs-on: self-hosted
+
+    strategy:
+      matrix:
+        node-version: [22.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Create production environment file
+        run: |
+          cat << 'EOF' > .env
+          ${{ secrets.PROD_ENV_FILE }}
+          EOF
+
+      - name: Restart Backend Server
+        run: pm2 start server.js --name "turf-backend" --update-env || pm2 reload "turf-backend" --update-env
